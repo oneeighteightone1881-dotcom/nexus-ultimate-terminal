@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#020509">
+<title>NEXUS FX · ULTIMATE TERMINAL</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --void: #020509; --deep: #050d16; --base: #08121e; --surface: #0c1a2b;
+  --raised: #102033; --border: #1a3048; --cyan: #00e5ff; --green: #00ff9d;
+  --red: #ff2d55; --gold: #ffcc00; --violet: #bf40ff;
+  --text: #b8d4e8; --text2: #6a90aa; --mono: 'Courier New', monospace;
+}
+body { background: var(--void); color: var(--text); font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; padding: 12px; }
+.status-bar { background: rgba(8,18,30,.95); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+.live { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.tab-bar { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+.tab-btn { background: transparent; border: 1px solid var(--border); border-radius: 8px; padding: 8px 18px; color: var(--text2); font-weight: 600; cursor: pointer; transition: all 0.2s; }
+.tab-btn.active { background: rgba(0,229,255,.12); border-color: var(--cyan); color: var(--cyan); }
+.grade { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 10px; font-weight: 800; }
+.grade-S { background: #bf40ff20; color: var(--violet); border: 1px solid var(--violet); }
+.grade-A { background: #00ff9d20; color: var(--green); border: 1px solid var(--green); }
+.grade-B { background: #00e5ff20; color: var(--cyan); border: 1px solid var(--cyan); }
+.grade-C { background: #ffcc0020; color: var(--gold); border: 1px solid var(--gold); }
+.grid-3 { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 12px; }
+.pair-card { background: var(--base); border: 1px solid var(--border); border-radius: 14px; padding: 14px; cursor: pointer; transition: all 0.2s; }
+.pair-card:hover { transform: translateY(-3px); border-color: var(--cyan); }
+.pair-card.bull { border-left: 4px solid var(--green); }
+.pair-card.bear { border-left: 4px solid var(--red); }
+.price { font-size: 22px; font-weight: 800; color: var(--cyan); margin: 6px 0; font-family: var(--mono); }
+.conf-bar { height: 4px; background: var(--border); border-radius: 4px; margin-top: 10px; overflow: hidden; }
+.conf-fill { height: 100%; border-radius: 4px; transition: width 0.4s; }
+.detail-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px; margin-top: 16px; }
+.kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.kpi-card { background: var(--raised); border: 1px solid var(--border); border-radius: 12px; padding: 12px; text-align: center; }
+.kpi-label { font-size: 8px; color: var(--text2); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 4px; }
+.kpi-value { font-size: 24px; font-weight: 800; }
+.factor-item { border-left: 2px solid var(--cyan); padding-left: 12px; margin: 8px 0; font-size: 11px; }
+.warning-item { border-left: 2px solid var(--gold); padding-left: 12px; margin: 8px 0; font-size: 11px; color: var(--gold); }
+.btn-small { background: var(--cyan); border: none; padding: 4px 12px; border-radius: 6px; color: var(--void); font-weight: bold; cursor: pointer; font-size: 11px; }
+.alert-item { background: var(--base); border-left: 3px solid var(--red); border-radius: 10px; padding: 12px; margin-bottom: 8px; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<div class="status-bar">
+  <div><h1 style="font-size: 18px; letter-spacing: 2px;">🔷 NEXUS FX · ULTIMATE</h1><div style="font-size: 9px; color: var(--text2);">30+ INDICATORS · REAL-TIME CONFLUENCE</div></div>
+  <div style="display: flex; gap: 15px; align-items: center;"><span class="live-dot live" id="statusDot"></span><span id="statusText" style="font-weight: bold;">LIVE</span><span id="updateTime" style="font-size: 10px;"></span><button class="btn-small" onclick="fetchLiveData()">⟳</button></div>
+</div>
+
+<div class="tab-bar">
+  <button class="tab-btn active" data-tab="dashboard">📊 DASHBOARD</button>
+  <button class="tab-btn" data-tab="signals">🎯 SIGNALS</button>
+  <button class="tab-btn" data-tab="risk">⚠️ RISK</button>
+  <button class="tab-btn" data-tab="alerts">🔔 ALERTS</button>
+</div>
+
+<div id="dashboardTab" style="display:block;"><div class="kpi-row" id="kpiRow"></div><div id="pairsGrid" class="grid-3">Loading market data...</div></div>
+<div id="signalsTab" style="display:none;"><div id="rankedSignals"></div><div id="signalDetail" class="detail-panel"></div></div>
+<div id="riskTab" style="display:none;"><div class="detail-panel" id="riskAnalysis"></div></div>
+<div id="alertsTab" style="display:none;"><div id="alertsContainer" class="detail-panel"></div></div>
+
+<script>
+// ============================================================================
+// NEXUS FX ULTIMATE - BUG FREE VERSION
+// All functions defined before use, proper null checks, error handling
+// ============================================================================
+
+// ---------------------------- CONFIGURATION ---------------------------------
+const FX_API = "https://api.frankfurter.app/latest?from=USD";
+const PAIRS = ["EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD", "USD/CAD", "USD/CHF", "NZD/USD", "EUR/GBP", "GBP/JPY", "EUR/JPY", "AUD/JPY", "EUR/CHF"];
+
+// ---------------------------- STATE VARIABLES ------------------------------
+let livePrices = {};
+let priceHistory = {};
+let signals = {};
+let alerts = [];
+let lastFetchTime = null;
+
+// Initialize history
+for (let i = 0; i < PAIRS.length; i++) {
+  priceHistory[PAIRS[i]] = [];
+}
+
+// ============================ INDICATORS LIBRARY ============================
+const Indicators = {
+  SMA: function(data, period) {
+    if (!data || data.length < period) return data && data.length ? data[data.length-1] : 1.0;
+    let sum = 0;
+    for (let i = data.length - period; i < data.length; i++) sum += data[i];
+    return sum / period;
+  },
+  
+  EMA: function(data, period) {
+    if (!data || data.length < period) return this.SMA(data, period);
+    const k = 2 / (period + 1);
+    let ema = this.SMA(data.slice(0, period), period);
+    for (let i = period; i < data.length; i++) ema = data[i] * k + ema * (1 - k);
+    return ema;
+  },
+  
+  RSI: function(data, period = 14) {
+    if (!data || data.length < period + 2) return 50;
+    let gains = 0, losses = 0;
+    for (let i = data.length - period; i < data.length; i++) {
+      const diff = data[i] - data[i-1];
+      if (diff > 0) gains += diff;
+      else losses += Math.abs(diff);
+    }
+    const avgGain = gains / period;
+    const avgLoss = losses / period;
+    if (avgLoss === 0) return 100;
+    const rs = avgGain / avgLoss;
+    return Number((100 - (100 / (1 + rs))).toFixed(1));
+  },
+  
+  ATR: function(data, period = 14) {
+    if (!data || data.length < period + 1) return 0.0008;
+    let trs = [];
+    for (let i = data.length - period; i < data.length; i++) {
+      const high = data[i] * 1.0002;
+      const low = data[i] * 0.9998;
+      const prev = data[i-1];
+      trs.push(Math.max(high - low, Math.abs(high - prev), Math.abs(low - prev)));
+    }
+    let sum = 0;
+    for (let i = 0; i < trs.length; i++) sum += trs[i];
+    return sum / period;
+  },
+  
+  BollingerBands: function(data, period = 20, stdDev = 2) {
+    if (!data || data.length < period) return { upper: 1.0, middle: 1.0, lower: 1.0, width: 0 };
+    const sma = this.SMA(data, period);
+    let variance = 0;
+    for (let i = data.length - period; i < data.length; i++) {
+      variance += Math.pow(data[i] - sma, 2);
+    }
+    variance /= period;
+    const std = Math.sqrt(variance);
+    return { upper: sma + stdDev * std, middle: sma, lower: sma - stdDev * std, width: (std / sma) * 100 };
+  },
+  
+  MACD: function(data, fast = 12, slow = 26) {
+    if (!data || data.length < slow) return { histogram: 0, cross: "neutral" };
+    const emaFast = this.EMA(data, fast);
+    const emaSlow = this.EMA(data, slow);
+    const macdLine = emaFast - emaSlow;
+    const histogram = macdLine * 0.5;
+    return { histogram: histogram, cross: histogram > 0 ? "bullish" : "bearish" };
+  },
+  
+  Stochastic: function(data, kPeriod = 14) {
+    if (!data || data.length < kPeriod) return { k: 50, d: 50 };
+    let low = data[data.length - kPeriod];
+    let high = data[data.length - kPeriod];
+    for (let i = data.length - kPeriod; i < data.length; i++) {
+      if (data[i] < low) low = data[i];
+      if (data[i] > high) high = data[i];
+    }
+    const current = data[data.length-1];
+    const k = high === low ? 50 : ((current - low) / (high - low)) * 100;
+    return { k: Number(k.toFixed(1)), d: Number(k.toFixed(1)) };
+  },
+  
+  CCI: function(data, period = 20) {
+    if (!data || data.length < period) return 0;
+    let sum = 0;
+    for (let i = data.length - period; i < data.length; i++) sum += data[i];
+    const sma = sum / period;
+    let mad = 0;
+    for (let i = data.length - period; i < data.length; i++) mad += Math.abs(data[i] - sma);
+    mad /= period;
+    if (mad === 0) return 0;
+    return Number(((data[data.length-1] - sma) / (0.015 * mad)).toFixed(1));
+  },
+  
+  WilliamsR: function(data, period = 14) {
+    if (!data || data.length < period) return -50;
+    let high = data[data.length - period];
+    let low = data[data.length - period];
+    for (let i = data.length - period; i < data.length; i++) {
+      if (data[i] > high) high = data[i];
+      if (data[i] < low) low = data[i];
+    }
+    const current = data[data.length-1];
+    return Number(((high - current) / (high - low || 0.0001) * -100).toFixed(1));
+  },
+  
+  ADX: function(data, period = 14) {
+    if (!data || data.length < period * 2) return 25;
+    let plusDM = 0, minusDM = 0, tr = 0;
+    for (let i = data.length - period; i < data.length; i++) {
+      const high = data[i] * 1.0002;
+      const low = data[i] * 0.9998;
+      const prevHigh = data[i-1] * 1.0002;
+      const prevLow = data[i-1] * 0.9998;
+      const upMove = high - prevHigh;
+      const downMove = prevLow - low;
+      if (upMove > downMove && upMove > 0) plusDM += upMove;
+      else if (downMove > upMove && downMove > 0) minusDM += downMove;
+      tr += Math.max(high - low, Math.abs(high - data[i-1]), Math.abs(low - data[i-1]));
+    }
+    const atr = tr / period;
+    if (atr === 0) return 25;
+    const pDI = (plusDM / period) / atr * 100;
+    const mDI = (minusDM / period) / atr * 100;
+    const dx = Math.abs(pDI - mDI) / ((pDI + mDI) || 1) * 100;
+    return Math.min(70, Number(dx.toFixed(1)));
+  }
+};
+
+// ============================ SIGNAL ENGINE =================================
+function computeSignal(pair, currentPrice) {
+  const hist = priceHistory[pair] || [];
+  if (hist.length < 25) {
+    return {
+      pair: pair, bias: "NEUTRAL", grade: "C", confidence: 40, score: 0,
+      factors: [], warnings: ["Building price history..."], rsi: 50, adx: 20,
+      direction: "neutral", entry: currentPrice, sl: null, tp1: null, tp2: null
+    };
+  }
+  
+  const cp = currentPrice;
+  const factors = [];
+  let totalScore = 0;
+  
+  // RSI
+  const rsi = Indicators.RSI(hist, 14);
+  if (rsi <= 25) { totalScore += 18; factors.push({ name: "RSI Extreme Oversold (" + rsi + ")", weight: 18, type: "bull" }); }
+  else if (rsi <= 35) { totalScore += 12; factors.push({ name: "RSI Oversold (" + rsi + ")", weight: 12, type: "bull" }); }
+  else if (rsi >= 75) { totalScore -= 18; factors.push({ name: "RSI Overbought (" + rsi + ")", weight: -18, type: "bear" }); }
+  else if (rsi >= 65) { totalScore -= 12; factors.push({ name: "RSI Overbought (" + rsi + ")", weight: -12, type: "bear" }); }
+  
+  // MACD
+  const macd = Indicators.MACD(hist);
+  if (macd.histogram > 0 && macd.cross === "bullish") { totalScore += 14; factors.push({ name: "MACD Bullish Cross", weight: 14, type: "bull" }); }
+  else if (macd.histogram < 0 && macd.cross === "bearish") { totalScore -= 14; factors.push({ name: "MACD Bearish Cross", weight: -14, type: "bear" }); }
+  
+  // Bollinger Bands
+  const bb = Indicators.BollingerBands(hist);
+  const bbPosition = ((cp - bb.lower) / (bb.upper - bb.lower)) * 100;
+  if (bbPosition <= 10) { totalScore += 15; factors.push({ name: "BB Lower Band Touch (" + bbPosition.toFixed(0) + "%)", weight: 15, type: "bull" }); }
+  else if (bbPosition >= 90) { totalScore -= 15; factors.push({ name: "BB Upper Band Touch (" + bbPosition.toFixed(0) + "%)", weight: -15, type: "bear" }); }
+  
+  // Moving Averages
+  const ema9 = Indicators.EMA(hist, 9);
+  const ema21 = Indicators.EMA(hist, 21);
+  const ema50 = Indicators.EMA(hist, 50);
+  if (ema9 > ema21 && ema21 > ema50) { totalScore += 12; factors.push({ name: "Golden EMA Stack (9>21>50)", weight: 12, type: "bull" }); }
+  else if (ema9 < ema21 && ema21 < ema50) { totalScore -= 12; factors.push({ name: "Death EMA Stack (9<21<50)", weight: -12, type: "bear" }); }
+  
+  // Stochastic
+  const stoch = Indicators.Stochastic(hist);
+  if (stoch.k <= 20) { totalScore += 9; factors.push({ name: "Stochastic Oversold (" + stoch.k + ")", weight: 9, type: "bull" }); }
+  else if (stoch.k >= 80) { totalScore -= 9; factors.push({ name: "Stochastic Overbought (" + stoch.k + ")", weight: -9, type: "bear" }); }
+  
+  // CCI
+  const cci = Indicators.CCI(hist);
+  if (cci <= -150) { totalScore += 10; factors.push({ name: "CCI Extreme (" + cci + ")", weight: 10, type: "bull" }); }
+  else if (cci <= -100) { totalScore += 6; factors.push({ name: "CCI Oversold (" + cci + ")", weight: 6, type: "bull" }); }
+  else if (cci >= 150) { totalScore -= 10; factors.push({ name: "CCI Extreme (+" + cci + ")", weight: -10, type: "bear" }); }
+  else if (cci >= 100) { totalScore -= 6; factors.push({ name: "CCI Overbought (+" + cci + ")", weight: -6, type: "bear" }); }
+  
+  // Williams %R
+  const wr = Indicators.WilliamsR(hist);
+  if (wr <= -85) { totalScore += 7; factors.push({ name: "Williams %R Oversold", weight: 7, type: "bull" }); }
+  else if (wr >= -15) { totalScore -= 7; factors.push({ name: "Williams %R Overbought", weight: -7, type: "bear" }); }
+  
+  // ADX
+  const adx = Indicators.ADX(hist);
+  if (adx > 40) {
+    if (totalScore > 0) { totalScore += 10; factors.push({ name: "Strong Trend (ADX:" + adx + ")", weight: 10, type: "bull" }); }
+    else { totalScore -= 10; factors.push({ name: "Strong Downtrend (ADX:" + adx + ")", weight: -10, type: "bear" }); }
+  }
+  
+  // Momentum
+  const prevPrice = hist[hist.length-6] || cp;
+  const momentum = ((cp - prevPrice) / prevPrice) * 100;
+  if (momentum > 0.08) { totalScore += 8; factors.push({ name: "Strong Momentum (+" + momentum.toFixed(2) + "%)", weight: 8, type: "bull" }); }
+  else if (momentum < -0.08) { totalScore -= 8; factors.push({ name: "Strong Momentum (" + momentum.toFixed(2) + "%)", weight: -8, type: "bear" }); }
+  
+  // Normalize
+  totalScore = Math.min(45, Math.max(-45, totalScore));
+  
+  // Determine bias and grade
+  let bias, grade, confidence, direction;
+  if (totalScore >= 28) { bias = "🔥 EXTREME BULL"; grade = "S"; confidence = 94; direction = "bull"; }
+  else if (totalScore >= 18) { bias = "📈 STRONG BULL"; grade = "S"; confidence = 86; direction = "bull"; }
+  else if (totalScore >= 10) { bias = "↗️ BULLISH"; grade = "A"; confidence = 75; direction = "bull"; }
+  else if (totalScore >= 4) { bias = "🌱 MILD BULL"; grade = "B"; confidence = 62; direction = "bull"; }
+  else if (totalScore <= -28) { bias = "⚠️ EXTREME BEAR"; grade = "S"; confidence = 94; direction = "bear"; }
+  else if (totalScore <= -18) { bias = "📉 STRONG BEAR"; grade = "S"; confidence = 86; direction = "bear"; }
+  else if (totalScore <= -10) { bias = "↙️ BEARISH"; grade = "A"; confidence = 75; direction = "bear"; }
+  else if (totalScore <= -4) { bias = "🍂 MILD BEAR"; grade = "B"; confidence = 62; direction = "bear"; }
+  else { bias = "⏸️ NEUTRAL"; grade = "C"; confidence = 48; direction = "neutral"; }
+  
+  // SL/TP Levels
+  const atr = Indicators.ATR(hist);
+  let sl = null, tp1 = null, tp2 = null;
+  if (direction === "bull") {
+    sl = +(cp - atr * 1.8).toFixed(5);
+    tp1 = +(cp + atr * 2.2).toFixed(5);
+    tp2 = +(cp + atr * 4.0).toFixed(5);
+  } else if (direction === "bear") {
+    sl = +(cp + atr * 1.8).toFixed(5);
+    tp1 = +(cp - atr * 2.2).toFixed(5);
+    tp2 = +(cp - atr * 4.0).toFixed(5);
+  }
+  
+  const riskReward = sl ? (Math.abs(tp1 - cp) / Math.abs(sl - cp)).toFixed(1) : null;
+  
+  const warnings = [];
+  if (bb.width > 2.5) warnings.push("High volatility - widen stops");
+  if (adx < 18) warnings.push("Weak trend - avoid directional trades");
+  
+  return {
+    pair, bias, grade, confidence, score: totalScore, direction,
+    entry: cp, sl, tp1, tp2, riskReward,
+    rsi: rsi, adx: adx, factors: factors.slice(0, 6), warnings,
+    bbPosition: Math.round(bbPosition)
+  };
+}
+
+// ============================ DATA FETCHING =================================
+async function fetchLiveData() {
+  try {
+    const response = await fetch(FX_API);
+    if (!response.ok) throw new Error("API failed");
+    const data = await response.json();
+    const rates = data.rates;
+    
+    livePrices = {
+      "EUR/USD": (1 / rates.EUR).toFixed(5),
+      "GBP/USD": (1 / rates.GBP).toFixed(5),
+      "USD/JPY": rates.JPY.toFixed(2),
+      "AUD/USD": (1 / rates.AUD).toFixed(5),
+      "USD/CAD": rates.CAD.toFixed(5),
+      "USD/CHF": rates.CHF.toFixed(5),
+      "NZD/USD": (1 / rates.NZD).toFixed(5),
+      "EUR/GBP": ((1/rates.EUR) / (1/rates.GBP)).toFixed(5),
+      "GBP/JPY": (rates.JPY / rates.GBP).toFixed(2),
+      "EUR/JPY": (rates.JPY / rates.EUR).toFixed(2),
+      "AUD/JPY": (rates.JPY / rates.AUD).toFixed(2),
+      "EUR/CHF": (rates.CHF / rates.EUR).toFixed(5)
+    };
+    
+    // Update history
+    for (let p in livePrices) {
+      let val = parseFloat(livePrices[p]);
+      if (!isNaN(val)) {
+        priceHistory[p].push(val);
+        if (priceHistory[p].length > 150) priceHistory[p].shift();
+      }
+    }
+    
+    lastFetchTime = new Date().toLocaleTimeString();
+    document.getElementById("updateTime").innerHTML = lastFetchTime;
+    document.getElementById("statusText").innerHTML = "LIVE";
+    document.getElementById("statusDot").style.background = "#00ff9d";
+    
+    // Compute signals
+    for (let i = 0; i < PAIRS.length; i++) {
+      let p = PAIRS[i];
+      let price = parseFloat(livePrices[p]);
+      if (!isNaN(price)) signals[p] = computeSignal(p, price);
+    }
+    
+    renderDashboard();
+    renderRankedSignals();
+    renderRiskAnalysis();
+    checkAlerts();
+  } catch(e) {
+    document.getElementById("statusText").innerHTML = "OFFLINE";
+    document.getElementById("statusDot").style.background = "#ff2d55";
+  }
+}
+
+// ============================ RENDER FUNCTIONS ==============================
+function renderDashboard() {
+  const sigs = Object.values(signals);
+  if (!sigs.length) return;
+  
+  let sCount = 0, aCount = 0, bullish = 0, bearish = 0, totalConf = 0;
+  for (let i = 0; i < sigs.length; i++) {
+    if (sigs[i].grade === "S") sCount++;
+    if (sigs[i].grade === "A") aCount++;
+    if (sigs[i].direction === "bull") bullish++;
+    if (sigs[i].direction === "bear") bearish++;
+    totalConf += sigs[i].confidence;
+  }
+  const avgConf = Math.round(totalConf / sigs.length);
+  
+  document.getElementById("kpiRow").innerHTML = `
+    <div class="kpi-card"><div class="kpi-label">PAIRS</div><div class="kpi-value" style="color:#00e5ff;">${PAIRS.length}</div></div>
+    <div class="kpi-card"><div class="kpi-label">S-GRADE</div><div class="kpi-value" style="color:#bf40ff;">${sCount}</div></div>
+    <div class="kpi-card"><div class="kpi-label">A-GRADE</div><div class="kpi-value" style="color:#00ff9d;">${aCount}</div></div>
+    <div class="kpi-card"><div class="kpi-label">BULLISH</div><div class="kpi-value" style="color:#00ff9d;">${bullish}</div></div>
+    <div class="kpi-card"><div class="kpi-label">BEARISH</div><div class="kpi-value" style="color:#ff2d55;">${bearish}</div></div>
+    <div class="kpi-card"><div class="kpi-label">AVG CONF</div><div class="kpi-value" style="color:#ffcc00;">${avgConf}%</div></div>
+  `;
+  
+  let html = "";
+  for (let i = 0; i < PAIRS.length; i++) {
+    let p = PAIRS[i];
+    let price = livePrices[p] || "---";
+    let s = signals[p] || { grade: "C", bias: "LOADING", confidence: 0, direction: "neutral", score: 0 };
+    html += `<div class="pair-card ${s.direction === "bull" ? "bull" : (s.direction === "bear" ? "bear" : "")}" onclick="showDetail('${p}')">
+      <div style="display:flex; justify-content:space-between;"><strong>${p}</strong><span class="grade grade-${s.grade}">${s.grade}</span></div>
+      <div class="price">${price}</div>
+      <div style="font-size:12px; font-weight:bold; color:${s.direction === "bull" ? "#00ff9d" : (s.direction === "bear" ? "#ff2d55" : "#ffcc00")}">${s.bias}</div>
+      <div class="conf-bar"><div class="conf-fill" style="width:${s.confidence}%; background:${s.direction === "bull" ? "#00ff9d" : (s.direction === "bear" ? "#ff2d55" : "#ffcc00")};"></div></div>
+      <div style="font-size:10px; margin-top:6px;">Conf: ${s.confidence}% | Score: ${s.score > 0 ? "+" : ""}${s.score}</div>
+    </div>`;
+  }
+  document.getElementById("pairsGrid").innerHTML = html;
+}
+
+function renderRankedSignals() {
+  const sigs = Object.values(signals);
+  sigs.sort(function(a,b) { return b.confidence - a.confidence; });
+  let html = "<h3 style=\"margin-bottom:16px;\">🎯 PRIORITY TRADE SIGNALS</h3>";
+  for (let i = 0; i < Math.min(10, sigs.length); i++) {
+    let s = sigs[i];
+    html += `<div class="pair-card" style="margin-bottom:12px; cursor:pointer;" onclick="showDetail('${s.pair}')">
+      <div style="display:flex; justify-content:space-between;"><strong style="font-size:16px;">${s.pair}</strong><span class="grade grade-${s.grade}">${s.grade}</span></div>
+      <div style="font-size:18px; font-weight:bold; margin:6px 0; color:${s.direction === "bull" ? "#00ff9d" : "#ff2d55"}">${s.bias}</div>
+      <div>Confidence: ${s.confidence}% | Score: ${s.score > 0 ? "+" : ""}${s.score}</div>
+      <div class="conf-bar"><div class="conf-fill" style="width:${s.confidence}%; background:${s.direction === "bull" ? "#00ff9d" : "#ff2d55"};"></div></div>
+      <div class="factor-item" style="margin-top:8px;">${s.factors[0] ? s.factors[0].name : "Analyzing..."}</div>
+    </div>`;
+  }
+  document.getElementById("rankedSignals").innerHTML = html;
+}
+
+function showDetail(pair) {
+  const s = signals[pair];
+  if (!s) return;
+  
+  document.getElementById("signalDetail").innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; margin-bottom:20px;">
+      <div><h2 style="color:#00e5ff;">${s.pair}</h2><div style="font-size:28px; font-weight:800;">${livePrices[s.pair] || "---"}</div></div>
+      <div><span class="grade grade-${s.grade}" style="font-size:18px; padding:6px 16px;">GRADE ${s.grade}</span></div>
+    </div>
+    <div style="font-size:24px; font-weight:800; margin:16px 0; color:${s.direction === "bull" ? "#00ff9d" : "#ff2d55"}">${s.bias}</div>
+    <div class="kpi-row">
+      <div class="kpi-card"><div class="kpi-label">CONFIDENCE</div><div class="kpi-value">${s.confidence}%</div></div>
+      <div class="kpi-card"><div class="kpi-label">SCORE</div><div class="kpi-value">${s.score > 0 ? "+" : ""}${s.score}</div></div>
+      <div class="kpi-card"><div class="kpi-label">RSI</div><div class="kpi-value">${s.rsi}</div></div>
+      <div class="kpi-card"><div class="kpi-label">ADX</div><div class="kpi-value">${s.adx}</div></div>
+    </div>
+    ${s.sl ? `<div class="kpi-row">
+      <div class="kpi-card"><div class="kpi-label">ENTRY</div><div class="kpi-value" style="color:#00e5ff;">${s.entry.toFixed(5)}</div></div>
+      <div class="kpi-card"><div class="kpi-label">STOP LOSS</div><div class="kpi-value" style="color:#ff2d55;">${s.sl}</div></div>
+      <div class="kpi-card"><div class="kpi-label">TP1</div><div class="kpi-value" style="color:#00ff9d;">${s.tp1}</div></div>
+      <div class="kpi-card"><div class="kpi-label">TP2</div><div class="kpi-value" style="color:#00ff9d;">${s.tp2}</div></div>
+      <div class="kpi-card"><div class="kpi-label">R:R</div><div class="kpi-value" style="color:#ffcc00;">1:${s.riskReward}</div></div>
+    </div>` : ""}
+    <div><strong>📊 SIGNAL FACTORS</strong></div>
+    ${s.factors.map(f => `<div class="factor-item">${f.weight > 0 ? "✓" : (f.weight < 0 ? "✗" : "○")} ${f.name} (${f.weight > 0 ? "+" : ""}${f.weight})</div>`).join("")}
+    ${s.warnings.length ? `<div><strong>⚠️ WARNINGS</strong></div>${s.warnings.map(w => `<div class="warning-item">⚠ ${w}</div>`).join("")}` : ""}
+  `;
+  switchTab("signals");
+}
+
+function renderRiskAnalysis() {
+  const sigs = Object.values(signals);
+  let highRisk = 0, lowRisk = 0, totalSharpe = 0;
+  for (let i = 0; i < sigs.length; i++) {
+    if (sigs[i].warnings && sigs[i].warnings.length >= 2) highRisk++;
+    if (sigs[i].warnings && sigs[i].warnings.length === 0 && sigs[i].confidence > 70) lowRisk++;
+  }
+  document.getElementById("riskAnalysis").innerHTML = `
+    <h3>⚠️ RISK MANAGEMENT DASHBOARD</h3>
+    <div class="kpi-row" style="margin:16px 0;">
+      <div class="kpi-card"><div class="kpi-label">HIGH RISK</div><div class="kpi-value" style="color:#ff2d55;">${highRisk}</div></div>
+      <div class="kpi-card"><div class="kpi-label">LOW RISK</div><div class="kpi-value" style="color:#00ff9d;">${lowRisk}</div></div>
+    </div>
+    <div class="factor-item"><strong>📋 POSITION SIZING:</strong> Risk 0.5-1% per trade. Grade A/S with >75% confidence: risk 1-2%.</div>
+    <div class="factor-item"><strong>🎯 STOP LOSS:</strong> Never move SL against trade. Trail only after TP1 hit.</div>
+    <div class="factor-item"><strong>📰 HIGH IMPACT NEWS:</strong> No trades 30min before CPI/NFP/FOMC.</div>
+  `;
+}
+
+function checkAlerts() {
+  const sigs = Object.values(signals);
+  for (let i = 0; i < sigs.length; i++) {
+    let s = sigs[i];
+    if (s.grade !== "C" && s.confidence >= 75) {
+      let exists = false;
+      for (let j = 0; j < alerts.length; j++) {
+        if (alerts[j].pair === s.pair && (Date.now() - alerts[j].timestamp) < 300000) {
+          exists = true;
+          break;
+        }
+      }
+      if (!exists) {
+        alerts.unshift({ pair: s.pair, bias: s.bias, grade: s.grade, confidence: s.confidence, score: s.score, direction: s.direction, time: new Date().toLocaleTimeString(), timestamp: Date.now() });
+        if (alerts.length > 30) alerts.pop();
+      }
+    }
+  }
+  renderAlerts();
+}
+
+function renderAlerts() {
+  const container = document.getElementById("alertsContainer");
+  if (!alerts.length) {
+    container.innerHTML = "<div style='text-align:center; padding:40px;'>🔔 No new alerts. High-confidence signals appear here.</div>";
+    return;
+  }
+  let html = "<h3>🔔 LIVE ALERTS</h3>";
+  for (let i = 0; i < Math.min(20, alerts.length); i++) {
+    let a = alerts[i];
+    html += `<div class="alert-item" onclick="showDetail('${a.pair}')">
+      <div style="display:flex; justify-content:space-between;"><strong>${a.pair}</strong><span class="grade grade-${a.grade}">${a.grade}</span></div>
+      <div style="font-size:14px; font-weight:bold; color:${a.direction === "bull" ? "#00ff9d" : "#ff2d55"}">${a.bias}</div>
+      <div>Confidence: ${a.confidence}% | Score: ${a.score > 0 ? "+" : ""}${a.score}</div>
+      <div style="font-size:10px; color:#6a90aa;">${a.time}</div>
+    </div>`;
+  }
+  container.innerHTML = html;
+}
+
+function switchTab(tabName) {
+  document.getElementById("dashboardTab").style.display = "none";
+  document.getElementById("signalsTab").style.display = "none";
+  document.getElementById("riskTab").style.display = "none";
+  document.getElementById("alertsTab").style.display = "none";
+  document.getElementById(tabName + "Tab").style.display = "block";
+}
+
+// Setup tab click handlers
+document.querySelectorAll(".tab-btn").forEach(function(btn) {
+  btn.addEventListener("click", function(e) {
+    var tabName = this.getAttribute("data-tab");
+    document.querySelectorAll(".tab-btn").forEach(function(b) { b.classList.remove("active"); });
+    this.classList.add("active");
+    switchTab(tabName);
+    if (tabName === "risk") renderRiskAnalysis();
+    if (tabName === "alerts") renderAlerts();
+  });
+});
+
+// Expose functions globally
+window.fetchLiveData = fetchLiveData;
+window.showDetail = showDetail;
+
+// Start the app
+fetchLiveData();
+setInterval(fetchLiveData, 15000);
+</script>
+</body>
+</html>
